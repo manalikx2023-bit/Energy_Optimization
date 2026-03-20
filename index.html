@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CGL-2 Furnace Setpoint Optimizer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&family=Barlow+Condensed:wght@600;700;800&display=swap');
+
+:root {
+  /* Light / white palette */
+  --bg:       #f0f4f8;
+  --bg2:      #ffffff;
+  --panel:    #ffffff;
+  --panel2:   #f7f9fc;
+  --border:   #dde3ec;
+  --border2:  #c5cfe0;
+  --shadow:   0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  --shadow2:  0 2px 8px rgba(0,0,0,0.08);
+
+  /* Accent colors – saturated, on white */
+  --blue:     #1565c0;
+  --blue-l:   #e3eeff;
+  --blue-m:   #90b8f8;
+  --nof:      #0277bd;
+  --nof-l:    #e1f5fe;
+  --rtf:      #e65100;
+  --rtf-l:    #fff3e0;
+  --jcf:      #1b5e20;
+  --jcf-l:    #e8f5e9;
+  --hbr:      #4a148c;
+  --hbr-l:    #f3e5f5;
+  --green:    #2e7d32;
+  --green-l:  #e8f5e9;
+  --amber:    #e65100;
+  --amber-l:  #fff8e1;
+  --red:      #c62828;
+  --red-l:    #ffebee;
+  --gray:     #455a64;
+  --gray2:    #78909c;
+  --gray3:    #b0bec5;
+
+  --text:     #1a2332;
+  --text2:    #455a64;
+  --text3:    #78909c;
+  --text4:    #b0bec5;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── HEADER ─────────────────────────────────── */
+.header {
+  background: var(--blue);
+  padding: 0 24px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky; top:0; z-index:200;
+  box-shadow: 0 2px 12px rgba(21,101,192,0.3);
+}
+.header-brand {
+  display: flex; align-items: center; gap: 14px;
+}
+.header-logo {
+  width: 36px; height: 36px;
+  background: rgba(255,255,255,0.15);
+  border: 1.5px solid rgba(255,255,255,0.3);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.header-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 20px; font-weight: 800;
+  color: #fff; letter-spacing: 1.5px;
+}
+.header-sub { font-size: 10px; color: rgba(255,255,255,0.65); letter-spacing: 0.5px; margin-top:1px; }
+.header-pills { display:flex; gap:10px; align-items:center; }
+.pill {
+  padding: 4px 12px; border-radius: 20px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px; letter-spacing: 0.5px; font-weight: 500;
+}
+.pill-green  { background:rgba(46,125,50,0.9);  color:#fff; }
+.pill-blue   { background:rgba(255,255,255,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3); }
+.header-clock { font-family:'DM Mono',monospace; font-size:11px; color:rgba(255,255,255,0.7); }
+
+/* ── KPI BAR ────────────────────────────────── */
+.kpi-bar {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.kpi-cell {
+  padding: 10px 18px;
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center;
+}
+.kpi-cell:last-child { border-right: none; }
+.kpi-lbl { font-size:9px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--text3); margin-bottom:3px; }
+.kpi-num {
+  font-family:'DM Mono',monospace;
+  font-size: 22px; font-weight: 500; color: var(--blue); line-height:1;
+}
+.kpi-num.ok   { color: var(--green); }
+.kpi-num.warn { color: var(--amber); }
+.kpi-num.bad  { color: var(--red);   }
+.kpi-sub { font-size:10px; color:var(--text3); margin-top:2px; }
+
+/* ── ENERGY PROGRESS BAR ────────────────────── */
+.ebar-wrap {
+  background: var(--panel); padding: 10px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 16px;
+}
+.ebar-label { font-size:11px; font-weight:600; color:var(--text2); white-space:nowrap; width:160px; }
+.ebar-track {
+  flex:1; height:14px; background:#eef2f7;
+  border-radius:7px; position:relative; overflow:visible;
+  border: 1px solid var(--border);
+}
+.ebar-fill {
+  height:100%; border-radius:7px; transition: width 0.5s ease, background 0.5s;
+  position:relative; overflow:hidden;
+}
+.ebar-fill::after {
+  content:''; position:absolute; inset:0;
+  background: linear-gradient(90deg,transparent,rgba(255,255,255,0.35),transparent);
+  animation: shim 2s linear infinite;
+}
+@keyframes shim { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
+.ebar-target {
+  position:absolute; top:-5px; bottom:-5px; width:2px;
+  background: var(--green);
+  border-radius:1px;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--green);
+}
+.ebar-target-lbl {
+  position:absolute; bottom:calc(100% + 7px);
+  font-size:9px; font-weight:600; color:var(--green);
+  font-family:'DM Mono',monospace;
+  white-space:nowrap; transform:translateX(-50%);
+}
+.ebar-ticks {
+  display:flex; justify-content:space-between;
+  font-size:9px; color:var(--text4);
+  font-family:'DM Mono',monospace;
+  margin-top:2px; padding: 0 1px;
+}
+.ebar-val { font-family:'DM Mono',monospace; font-size:14px; font-weight:600; color:var(--blue); white-space:nowrap; width:90px; text-align:right; }
+
+/* ── ZONE STATUS ROW ────────────────────────── */
+.zone-bar {
+  display:grid; grid-template-columns:repeat(5,1fr);
+  background: var(--panel2);
+  border-bottom: 1px solid var(--border);
+}
+.zstat {
+  padding: 7px 12px; border-right:1px solid var(--border);
+  text-align:center;
+}
+.zstat:last-child { border-right:none; }
+.zstat-name { font-size:9px; font-weight:700; letter-spacing:1.5px; color:var(--text3); margin-bottom:2px; }
+.zstat-val { font-family:'DM Mono',monospace; font-size:14px; font-weight:500; }
+.zstat-oh  { font-size:9px; margin-top:1px; font-family:'DM Mono',monospace; }
+.c-ok   { color:var(--green); }
+.c-warn { color:var(--amber); }
+.c-bad  { color:var(--red); }
+.c-info { color:var(--nof); }
+
+/* ── 3-COL LAYOUT ───────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 370px 1fr 310px;
+  height: calc(100vh - 52px - 44px - 34px - 32px);
+  overflow: hidden;
+}
+.col-l, .col-r {
+  background: var(--panel);
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
+}
+.col-r { border-right:none; border-left:1px solid var(--border); }
+.col-c { display:flex; flex-direction:column; background: var(--bg); }
+
+/* ── SECTION HEADERS ────────────────────────── */
+.sh {
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
+  color: var(--text3);
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--border);
+  display:flex; align-items:center; gap:8px;
+  background: var(--panel2);
+}
+.sh-dot {
+  width:3px; height:14px; border-radius:2px;
+  background: var(--blue); flex-shrink:0;
+}
+.sh-dot.nof { background:var(--nof); }
+.sh-dot.rtf { background:var(--rtf); }
+.sh-dot.jcf { background:var(--jcf); }
+.sh-dot.hbr { background:var(--hbr); }
+.sh-dot.proc { background:var(--gray); }
+
+/* ── GRADE BUTTONS ──────────────────────────── */
+.grade-wrap { padding:12px 16px 8px; }
+.grade-row  { display:flex; gap:8px; margin-bottom:10px; }
+.gbtn {
+  flex:1; padding:8px 6px;
+  border: 1.5px solid var(--border2);
+  background: var(--bg);
+  color: var(--text2);
+  font-family:'Barlow Condensed',sans-serif; font-size:15px; font-weight:700;
+  letter-spacing:1px; cursor:pointer; border-radius:6px; transition:all 0.18s;
+}
+.gbtn.active { background:var(--blue); color:#fff; border-color:var(--blue); box-shadow: 0 2px 8px rgba(21,101,192,0.3); }
+.gbtn:hover:not(.active) { border-color:var(--blue-m); background:var(--blue-l); }
+.sel-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.sel-lbl { font-size:9px; font-weight:600; letter-spacing:1px; color:var(--text3); margin-bottom:4px; text-transform:uppercase; }
+select {
+  width:100%; padding:7px 10px;
+  border:1.5px solid var(--border2); border-radius:6px;
+  background:var(--bg); color:var(--text);
+  font-family:'DM Mono',monospace; font-size:12px;
+  cursor:pointer; outline:none; transition:border-color 0.15s;
+}
+select:focus { border-color:var(--blue); }
+
+/* ── OPTIMAL SETPOINTS TABLE ────────────────── */
+.opt-table { margin: 8px 16px 10px; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.opt-table-title { font-size:9px; font-weight:700; letter-spacing:1px; color:var(--text3); padding:7px 10px; background:var(--panel2); border-bottom:1px solid var(--border); text-transform:uppercase; }
+.opt-row { display:grid; grid-template-columns:1fr 80px 90px; padding:5px 10px; border-bottom:1px solid var(--border); align-items:center; }
+.opt-row:last-child { border-bottom:none; }
+.opt-row:nth-child(even) { background:#fafbfc; }
+.opt-pname { font-size:10px; color:var(--text2); }
+.opt-val { font-family:'DM Mono',monospace; font-size:11px; font-weight:600; color:var(--blue); text-align:right; }
+.opt-range { font-size:9px; color:var(--text3); text-align:right; font-family:'DM Mono',monospace; }
+
+/* ── ZONE ACCORDION ─────────────────────────── */
+.zone-card {
+  margin: 6px 10px 0;
+  border: 1.5px solid var(--border);
+  border-radius: 8px; overflow:hidden;
+}
+.zone-card.nof { border-color: #90caf9; }
+.zone-card.rtf { border-color: #ffcc80; }
+.zone-card.proc { border-color: #b0bec5; }
+.zone-card.jcf { border-color: #a5d6a7; }
+.zone-card.hbr { border-color: #ce93d8; }
+
+.zone-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 12px; cursor:pointer; user-select:none;
+}
+.zone-hdr.nof  { background:#e3f2fd; }
+.zone-hdr.rtf  { background:#fff8f1; }
+.zone-hdr.proc { background:#f5f7fa; }
+.zone-hdr.jcf  { background:#f1f8f1; }
+.zone-hdr.hbr  { background:#faf0fe; }
+
+.zone-badge {
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:13px; font-weight:800; letter-spacing:2px;
+}
+.zone-badge.nof  { color:var(--nof); }
+.zone-badge.rtf  { color:var(--rtf); }
+.zone-badge.proc { color:var(--gray); }
+.zone-badge.jcf  { color:var(--jcf); }
+.zone-badge.hbr  { color:var(--hbr); }
+
+.zone-fullname { font-size:10px; color:var(--text3); margin-left:6px; }
+.zone-tag {
+  font-size:9px; font-weight:700; padding:2px 7px; border-radius:10px;
+  letter-spacing:0.5px;
+}
+.tag-crit { background:var(--red-l); color:var(--red); }
+.tag-ok   { background:var(--green-l); color:var(--green); }
+.tag-warn { background:var(--amber-l); color:var(--amber); }
+.tag-info { background:var(--blue-l); color:var(--blue); }
+
+.zone-body { padding:10px 12px; display:none; }
+.zone-body.open { display:block; }
+
+/* ── SLIDERS ────────────────────────────────── */
+.sb { margin-bottom:12px; }
+.sb:last-child { margin-bottom:0; }
+.sb-top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; }
+.sb-name { font-size:11px; color:var(--text2); font-weight:500; }
+.sb-val  { font-family:'DM Mono',monospace; font-size:13px; font-weight:600; color:var(--blue); }
+.sb-val.ok   { color:var(--green); }
+.sb-val.warn { color:var(--amber); }
+.sb-val.bad  { color:var(--red); }
+
+input[type=range] {
+  width:100%; height:5px;
+  -webkit-appearance:none; appearance:none;
+  background: var(--border); border-radius:3px;
+  outline:none; cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:16px; height:16px;
+  border-radius:50%; background:var(--blue); cursor:pointer;
+  box-shadow: 0 1px 4px rgba(21,101,192,0.4);
+  border: 2.5px solid #fff;
+}
+input[type=range]::-moz-range-thumb {
+  width:14px; height:14px; border-radius:50%;
+  background:var(--blue); cursor:pointer;
+  border: 2px solid #fff;
+}
+.sb-limits { display:flex; justify-content:space-between; font-size:9px; color:var(--text4); font-family:'DM Mono',monospace; margin-top:2px; }
+.sb-hint { font-size:9px; color:var(--text3); margin-top:2px; }
+
+/* ── BUTTONS ────────────────────────────────── */
+.btn-row { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--border); background:var(--panel2); }
+.btn {
+  flex:1; padding:9px 8px; border-radius:6px; border:1.5px solid;
+  font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:700;
+  letter-spacing:1.5px; cursor:pointer; transition:all 0.15s;
+}
+.btn-p { background:var(--blue); color:#fff; border-color:var(--blue); }
+.btn-p:hover { background:#1976d2; }
+.btn-s { background:var(--bg); color:var(--text2); border-color:var(--border2); }
+.btn-s:hover { border-color:var(--gray); color:var(--text); }
+.btn-g { background:var(--green-l); color:var(--green); border-color:var(--green); }
+.btn-g:hover { background:var(--green); color:#fff; }
+
+/* ── FURNACE SVG CENTER ─────────────────────── */
+.furnace-wrap {
+  flex:1; background:var(--bg); position:relative; overflow:hidden;
+  display:flex; align-items:center; justify-content:center; padding:12px;
+}
+
+/* ── ADVISORY CARDS ─────────────────────────── */
+.adv-wrap { padding:12px 14px; }
+.adv-card {
+  border: 1px solid var(--border); border-radius:8px;
+  padding: 10px 12px; margin-bottom:8px;
+  background:var(--panel);
+  box-shadow: var(--shadow);
+  position:relative; overflow:hidden;
+}
+.adv-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; border-radius:4px 0 0 4px; }
+.adv-card.ok::before   { background:var(--green); }
+.adv-card.warn::before { background:var(--amber); }
+.adv-card.bad::before  { background:var(--red); }
+.adv-card.info::before { background:var(--blue); }
+.adv-t {
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:12px; font-weight:700; letter-spacing:1px; margin-bottom:4px;
+}
+.adv-t.ok   { color:var(--green); }
+.adv-t.warn { color:var(--amber); }
+.adv-t.bad  { color:var(--red);   }
+.adv-t.info { color:var(--blue);  }
+.adv-body { font-size:10.5px; color:var(--text2); line-height:1.55; }
+
+/* ── REC TABLE ──────────────────────────────── */
+.rt { width:100%; border-collapse:collapse; font-size:11px; }
+.rt th { padding:6px 10px; background:var(--panel2); color:var(--text3); font-size:9px; font-weight:700; letter-spacing:1px; text-transform:uppercase; border-bottom:1px solid var(--border); text-align:left; }
+.rt td { padding:5px 10px; border-bottom:1px solid var(--border); color:var(--text2); font-family:'DM Mono',monospace; font-size:11px; }
+.rt tr:hover td { background:#f5f8ff; }
+
+/* ── DRIVER BARS ────────────────────────────── */
+.drv-item { margin-bottom:7px; }
+.drv-top { display:flex; justify-content:space-between; font-size:10px; margin-bottom:2px; }
+.drv-name { color:var(--text2); font-weight:500; }
+.drv-v { font-family:'DM Mono',monospace; font-size:10px; font-weight:600; }
+.drv-track { height:6px; background:#eef2f7; border-radius:3px; overflow:hidden; border:1px solid var(--border); }
+.drv-fill  { height:100%; border-radius:3px; transition:width 0.4s; }
+
+/* ── GT REF TABLE ───────────────────────────── */
+.gt { width:100%; border-collapse:collapse; font-size:10px; }
+.gt th { padding:5px 8px; background:var(--panel2); color:var(--text3); font-size:9px; font-weight:700; letter-spacing:1px; text-transform:uppercase; border-bottom:1px solid var(--border); text-align:center; }
+.gt td { padding:5px 8px; border-bottom:1px solid var(--border); text-align:center; font-family:'DM Mono',monospace; color:var(--text2); }
+.gt tr.hl td { background:#fff8e1; }
+.gt tr.hl td:first-child { font-weight:700; color:var(--amber); }
+
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-brand">
+    <div class="header-logo">🔥</div>
+    <div>
+      <div class="header-title">CGL-2 FURNACE SETPOINT OPTIMIZER</div>
+      <div class="header-sub">ENERGY ADVISORY SYSTEM — CONTINUOUS GALVANIZING LINE No.2</div>
+    </div>
+  </div>
+  <div class="header-pills">
+    <span class="pill pill-green">● ADVISORY ACTIVE</span>
+    <span class="pill pill-blue">DEMO PROTOTYPE</span>
+    <span class="header-clock" id="clock"></span>
+  </div>
+</header>
+
+<!-- KPI BAR -->
+<div class="kpi-bar">
+  <div class="kpi-cell">
+    <div class="kpi-lbl">Pred. MMBTU/t</div>
+    <div class="kpi-num warn" id="kpi-m">0.600</div>
+    <div class="kpi-sub">Live estimate</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-lbl">Target MMBTU/t</div>
+    <div class="kpi-num ok">0.450</div>
+    <div class="kpi-sub">Design target</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-lbl">Gap to Target</div>
+    <div class="kpi-num bad" id="kpi-gap">+0.150</div>
+    <div class="kpi-sub">MMBTU/t excess</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-lbl">Efficiency</div>
+    <div class="kpi-num warn" id="kpi-eff">75%</div>
+    <div class="kpi-sub">vs target</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-lbl">Status</div>
+    <div class="kpi-num bad" id="kpi-st">ACTION</div>
+    <div class="kpi-sub">Advisory level</div>
+  </div>
+</div>
+
+<!-- ENERGY BAR -->
+<div class="ebar-wrap">
+  <div class="ebar-label">Specific Fuel Energy</div>
+  <div style="flex:1;position:relative;padding-top:18px;">
+    <div class="ebar-track">
+      <div class="ebar-fill" id="ebar" style="width:60%;background:linear-gradient(90deg,#ef6c00,#e53935)"></div>
+      <div class="ebar-target" style="left:27.3%">
+        <div class="ebar-target-lbl">TARGET 0.450</div>
+      </div>
+    </div>
+    <div class="ebar-ticks">
+      <span>0.35</span><span>0.40</span><span>0.45</span><span>0.50</span><span>0.55</span><span>0.60</span><span>0.70</span>
+    </div>
+  </div>
+  <div class="ebar-val" id="ebar-v">0.600 MMBTU/t</div>
+</div>
+
+<!-- ZONE STATUS ROW -->
+<div class="zone-bar">
+  <div class="zstat">
+    <div class="zstat-name" style="color:var(--nof)">NOF EXIT</div>
+    <div class="zstat-val c-warn" id="zs-nof">—</div>
+    <div class="zstat-oh c-warn" id="zo-nof">—</div>
+  </div>
+  <div class="zstat">
+    <div class="zstat-name" style="color:var(--rtf)">RTF SZ</div>
+    <div class="zstat-val c-warn" id="zs-rtf">—</div>
+    <div class="zstat-oh c-warn" id="zo-rtf">—</div>
+  </div>
+  <div class="zstat">
+    <div class="zstat-name" style="color:var(--jcf)">JCF EXIT</div>
+    <div class="zstat-val c-ok">443°C</div>
+    <div class="zstat-oh c-ok">✓ IN RANGE</div>
+  </div>
+  <div class="zstat">
+    <div class="zstat-name" style="color:var(--hbr)">HBR</div>
+    <div class="zstat-val c-warn" id="zs-hbr">528°C</div>
+    <div class="zstat-oh c-bad" id="zo-hbr">OH1: +8°C</div>
+  </div>
+  <div class="zstat">
+    <div class="zstat-name">LINE SPEED</div>
+    <div class="zstat-val c-ok" id="zs-spd">—</div>
+    <div class="zstat-oh" id="zo-spd">—</div>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+
+  <!-- LEFT PANEL: OPERATOR INPUTS -->
+  <div class="col-l">
+
+    <!-- Grade & Product -->
+    <div class="sh"><div class="sh-dot"></div>GRADE & PRODUCT SETUP</div>
+    <div class="grade-wrap">
+      <div class="grade-row">
+        <button class="gbtn active" onclick="setGrade('SS250',this)">SS250</button>
+        <button class="gbtn" onclick="setGrade('SS350',this)">SS350</button>
+        <button class="gbtn" onclick="setGrade('SS550',this)">SS550</button>
+      </div>
+      <div class="sel-row">
+        <div>
+          <div class="sel-lbl">Thickness (mm)</div>
+          <select id="sel-thk" onchange="go()">
+            <option value="0.37">0.37 mm — Thin</option>
+            <option value="0.43" selected>0.43 mm — Standard</option>
+            <option value="0.50">0.50 mm — Medium</option>
+            <option value="0.60">0.60 mm — Heavy</option>
+            <option value="0.70">0.70 mm — Max</option>
+          </select>
+        </div>
+        <div>
+          <div class="sel-lbl">Width (mm)</div>
+          <select id="sel-wid" onchange="go()">
+            <option value="1172">1172 mm</option>
+            <option value="1200" selected>1200 mm</option>
+            <option value="1227">1227 mm</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Optimal reference table for current grade × thickness -->
+    <div class="opt-table">
+      <div class="opt-table-title">Optimal Setpoints — <span id="gt-head">SS250 / 0.43 mm</span></div>
+      <div id="gt-rows"></div>
+    </div>
+
+    <!-- NOF ZONE -->
+    <div class="zone-card nof">
+      <div class="zone-hdr nof" onclick="tog('nof')">
+        <div style="display:flex;align-items:center">
+          <span class="zone-badge nof">NOF</span>
+          <span class="zone-fullname">Non-Oxidizing Furnace</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="zone-tag tag-warn" id="tag-nof">MONITOR</span>
+          <span style="font-size:10px;color:var(--text3)" id="arr-nof">▶</span>
+        </div>
+      </div>
+      <div class="zone-body open" id="zb-nof">
+        <div class="sb">
+          <div class="sb-top"><span class="sb-name">Z1 Entry Zone (°C)</span><span class="sb-val" id="v-nof-z1">994</span></div>
+          <input type="range" id="s-nof-z1" min="840" max="1100" step="5" value="994" oninput="sl('nof-z1',this.value)">
+          <div class="sb-limits"><span>840°C</span><span>Optimal: SS250→950–1000 / SS550→870–920</span><span>1100°C</span></div>
+        </div>
+        <div class="sb">
+          <div class="sb-top"><span class="sb-name">Z2 Temperature (°C)</span><span class="sb-val" id="v-nof-z2">1216</span></div>
+          <input type="range" id="s-nof-z2" min="1150" max="1250" step="5" value="1216" oninput="sl('nof-z2',this.value)">
+          <div class="sb-limits"><span>1150°C</span><span></span><span>1250°C</span></div>
+        </div>
+        <div class="sb">
+          <div class="sb-top"><span class="sb-name">Z3 Temperature (°C)</span><span class="sb-val" id="v-nof-z3">1243</span></div>
+          <input type="range" id="s-nof-z3" min="1190" max="1265" step="5" value="1243" oninput="sl('nof-z3',this.value)">
+          <div class="sb-limits"><span>1190°C</span><span></span><span>1265°C</span></div>
+        </div>
+        <div class="sb">
+          <div class="sb-top"><span class="sb-name">Z4 Exit Zone (°C)</span><span class="sb-val" id="v-nof-z4">1214</span></div>
+          <input type="range" id="s-nof-z4" min="1178" max="1232" step="5" value="1214" oninput="sl('nof-z4',this.value)">
+          <div class="sb-limits"><span>1178°C</span><span></span><span>1232°C</span></div>
+        </div>
+        <div class="sb" style="margin-bottom:0">
+          <div class="sb-top"><span class="sb-name">Comb Air Pressure (mmwc)</span><span class="sb-val" id="v-nof-press">1362</span></div>
+          <input type="range" id="s-nof-press" min="1188" max="1496" step="5" value="1362" oninput="sl('nof-press',this.value)">
+          <div class="sb-limits"><span>1188</span><span>↑ Target: 1440–1500</span><span>1496</span></div>
+          <div class="sb-hint">Higher pressure → better combustion efficiency → less fuel wasted</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RTF ZONE -->
+    <div class="zone-card rtf" style="margin-top:6px">
+      <div class="zone-hdr rtf" onclick="tog('rtf')">
+        <div style="display:flex;align-items:center">
+          <span class="zone-badge rtf">RTF</span>
+          <span class="zone-fullname">Radiant Tube Furnace — #1 Energy Driver</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="zone-tag tag-crit" id="tag-rtf">CRITICAL</span>
+          <span style="font-size:10px;color:var(--text3)" id="arr-rtf">▶</span>
+        </div>
+      </div>
+      <div class="zone-body open" id="zb-rtf">
+        <div class="sb">
+          <div class="sb-top"><span class="sb-name">RTF Z1 (°C)</span><span class="sb-val" id="v-rtf-z1">680</span></div>
+          <input type="range" id="s-rtf-z1" min="557" max="730" step="5" value="680" oninput="sl('rtf-z1',this.value)">
+          <div class="sb-limits"><span>557°C</span><span></span><span>730°C</span></div>
+        </div>
+        <div class="sb">
+          <div class="sb-top"><span class="sb-name">RTF Z2 (°C)</span><span class="sb-val" id="v-rtf-z2">720</span></div>
+          <input type="range" id="s-rtf-z2" min="561" max="780" step="5" value="720" oninput="sl('rtf-z2',this.value)">
+          <div class="sb-limits"><span>561°C</span><span>r = +0.676 (strongest)</span><span>780°C</span></div>
+        </div>
+        <div class="sb" style="margin-bottom:0">
+          <div class="sb-top"><span class="sb-name">RTF Soaking Zone (°C)</span><span class="sb-val" id="v-rtf-sz">670</span></div>
+          <input type="range" id="s-rtf-sz" min="533" max="750" step="5" value="670" oninput="sl('rtf-sz',this.value)">
+          <div class="sb-limits"><span>533°C</span><span>r = +0.682 — most critical</span><span>750°C</span></div>
+          <div class="sb-hint">RTF SZ is the single largest fuel driver — keep within grade target band</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROCESS LEVERS -->
+    <div class="zone-card proc" style="margin-top:6px">
+      <div class="zone-hdr proc" onclick="tog('proc')">
+        <div style="display:flex;align-items:center">
+          <span class="zone-badge proc">PROC</span>
+          <span class="zone-fullname">Process Control Levers</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="zone-tag tag-warn" id="tag-proc">REVIEW</span>
+          <span style="font-size:10px;color:var(--text3)" id="arr-proc">▶</span>
+        </div>
+      </div>
+      <div class="zone-body open" id="zb-proc">
+        <div class="sb">
+          <div class="sb-top"><span class="sb-name">Line Speed (mpm)</span><span class="sb-val" id="v-speed">125</span></div>
+          <input type="range" id="s-speed" min="87" max="140" step="1" value="125" oninput="sl('speed',this.value)">
+          <div class="sb-limits"><span>87 mpm</span><span>Min: SS250 ≥125 / SS550 ≥128</span><span>140 mpm</span></div>
+          <div class="sb-hint">r = −0.50 with MMBTU/t — higher speed reduces specific fuel</div>
+        </div>
+        <div class="sb" style="margin-bottom:0">
+          <div class="sb-top"><span class="sb-name">Comb Air Preheat (°C)</span><span class="sb-val" id="v-preheat">155</span></div>
+          <input type="range" id="s-preheat" min="97" max="237" step="5" value="155" oninput="sl('preheat',this.value)">
+          <div class="sb-limits"><span>97°C</span><span>Target &gt;160°C</span><span>237°C</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JCF/HBR info cards -->
+    <div class="zone-card jcf" style="margin-top:6px">
+      <div class="zone-hdr jcf" onclick="tog('jcf')">
+        <div style="display:flex;align-items:center">
+          <span class="zone-badge jcf">JCF</span>
+          <span class="zone-fullname">Jet Cooling Furnace</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="zone-tag tag-ok">STABLE</span>
+          <span style="font-size:10px;color:var(--text3)" id="arr-jcf">▶</span>
+        </div>
+      </div>
+      <div class="zone-body" id="zb-jcf" style="font-size:10.5px;color:var(--text2);line-height:1.6">
+        JCF is the most stable zone in CGL-2 (σ = 0.35°C over 131 days).<br>
+        <strong>Target:</strong> 434–446°C &nbsp;|&nbsp; <strong>Observed mean:</strong> 443.1°C<br>
+        Only 0.5–1.2% hours exceed limit (max +2°C). No corrective action required.<br>
+        <span style="color:var(--jcf);font-weight:600">✓ Use JCF stability as benchmark for NOF/RTF control logic.</span>
+      </div>
+    </div>
+    <div class="zone-card hbr" style="margin-top:6px;margin-bottom:6px">
+      <div class="zone-hdr hbr" onclick="tog('hbr')">
+        <div style="display:flex;align-items:center">
+          <span class="zone-badge hbr">HBR</span>
+          <span class="zone-fullname">Hold & Baffle Roll</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="zone-tag tag-crit">67–74% OVERHEAT</span>
+          <span style="font-size:10px;color:var(--text3)" id="arr-hbr">▶</span>
+        </div>
+      </div>
+      <div class="zone-body" id="zb-hbr" style="font-size:10.5px;color:var(--text2);line-height:1.6">
+        <span style="color:var(--red);font-weight:600">HBR runs 8–12°C above 520°C upper limit (avg 528–532°C).</span><br>
+        Both SS250 (67.7%) and SS550 (74.5%) affected equally — grade-independent.<br>
+        Nov-25 worst: 99%+ hours above limit. Pattern is structural — not addressable via furnace setpoints.<br>
+        <span style="color:var(--amber);font-weight:600">Action: Inspect HBR cooling system. Recalibrate setpoint. Check liquid N₂ flow rate.</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-p" onclick="applyOpt()">▲ APPLY OPTIMAL</button>
+      <button class="btn btn-s" onclick="resetDef()">RESET</button>
+      <button class="btn btn-g" onclick="go()">RUN ADVISORY ▶</button>
+    </div>
+  </div>
+
+  <!-- CENTER: FURNACE INFOGRAPHIC -->
+  <div class="col-c">
+    <div class="furnace-wrap">
+      <svg viewBox="0 0 680 480" xmlns="http://www.w3.org/2000/svg"
+           style="width:100%;height:100%;max-height:100%">
+        <defs>
+          <filter id="fs"><feDropShadow dx="0" dy="1" stdDeviation="3" flood-opacity="0.12"/></filter>
+          <linearGradient id="bg-g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f8fafd"/><stop offset="100%" stop-color="#edf2f8"/>
+          </linearGradient>
+          <linearGradient id="nof-g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#e3f2fd"/><stop offset="100%" stop-color="#bbdefb"/>
+          </linearGradient>
+          <linearGradient id="rtf-g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#fff8f1"/><stop offset="100%" stop-color="#ffe0b2"/>
+          </linearGradient>
+          <linearGradient id="strip-g" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#cfd8dc"/>
+            <stop id="sc1" offset="25%" stop-color="#ef9a9a"/>
+            <stop id="sc2" offset="55%" stop-color="#e53935"/>
+            <stop id="sc3" offset="75%" stop-color="#ff8a65"/>
+            <stop offset="100%" stop-color="#cfd8dc"/>
+          </linearGradient>
+          <linearGradient id="spd-g" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#1565c0"/><stop offset="100%" stop-color="#42a5f5"/>
+          </linearGradient>
+          <linearGradient id="mb-g" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#2e7d32"/><stop offset="100%" stop-color="#ef6c00"/>
+          </linearGradient>
+        </defs>
+
+        <!-- Background card -->
+        <rect x="10" y="10" width="660" height="460" rx="12" fill="url(#bg-g)" filter="url(#fs)" stroke="#dde3ec" stroke-width="1"/>
+
+        <!-- Title -->
+        <text x="340" y="30" fill="#78909c" font-family="Barlow Condensed" font-size="11" text-anchor="middle" letter-spacing="3" font-weight="600">CGL-2 STRIP PROCESSING FURNACE — LIVE SCHEMATIC</text>
+
+        <!-- ENTRY label -->
+        <text x="32" y="232" fill="#b0bec5" font-family="DM Mono" font-size="9" text-anchor="middle">ENTRY</text>
+        <line x1="20" y1="235" x2="55" y2="235" stroke="#b0bec5" stroke-width="1" stroke-dasharray="3,3"/>
+
+        <!-- ═══ NOF ═══ -->
+        <rect x="60" y="90" width="170" height="220" rx="8" fill="url(#nof-g)" stroke="#0277bd" stroke-width="1.5" filter="url(#fs)"/>
+        <!-- NOF internal zone dividers -->
+        <line x1="103" y1="95" x2="103" y2="305" stroke="#0277bd" stroke-width="0.8" stroke-dasharray="4,4" opacity="0.5"/>
+        <line x1="148" y1="95" x2="148" y2="305" stroke="#0277bd" stroke-width="0.8" stroke-dasharray="4,4" opacity="0.5"/>
+        <line x1="190" y1="95" x2="190" y2="305" stroke="#0277bd" stroke-width="0.8" stroke-dasharray="4,4" opacity="0.5"/>
+        <!-- NOF burner icons (top) -->
+        <g fill="#0277bd" opacity="0.4">
+          <polygon points="80,100 86,115 74,115"/><polygon points="124,95 130,110 118,110"/>
+          <polygon points="168,100 174,115 162,115"/><polygon points="210,100 216,115 204,115"/>
+        </g>
+        <!-- NOF burner icons (bottom) -->
+        <g fill="#0277bd" opacity="0.4">
+          <polygon points="80,300 86,285 74,285"/><polygon points="124,305 130,290 118,290"/>
+          <polygon points="168,300 174,285 162,285"/><polygon points="210,300 216,285 204,285"/>
+        </g>
+        <!-- NOF zone temp labels -->
+        <text x="80"  y="82" fill="#01579b" font-family="DM Mono" font-size="8" text-anchor="middle">Z1</text>
+        <text x="125" y="82" fill="#01579b" font-family="DM Mono" font-size="8" text-anchor="middle">Z2</text>
+        <text x="168" y="82" fill="#01579b" font-family="DM Mono" font-size="8" text-anchor="middle">Z3</text>
+        <text x="210" y="82" fill="#01579b" font-family="DM Mono" font-size="8" text-anchor="middle">Z4</text>
+        <text x="80"  y="73" fill="#0277bd" font-family="DM Mono" font-size="9" text-anchor="middle" id="sZ1">994°C</text>
+        <text x="125" y="73" fill="#0277bd" font-family="DM Mono" font-size="9" text-anchor="middle" id="sZ2">1216°C</text>
+        <text x="168" y="73" fill="#0277bd" font-family="DM Mono" font-size="9" text-anchor="middle" id="sZ3">1243°C</text>
+        <text x="210" y="73" fill="#0277bd" font-family="DM Mono" font-size="9" text-anchor="middle" id="sZ4">1214°C</text>
+        <!-- NOF label block -->
+        <text x="145" y="330" fill="#0277bd" font-family="Barlow Condensed" font-size="15" text-anchor="middle" font-weight="800" letter-spacing="2">NOF</text>
+        <text x="145" y="342" fill="#78909c" font-family="DM Mono" font-size="7.5" text-anchor="middle">NON-OXIDIZING FURNACE</text>
+        <text x="145" y="356" fill="#0277bd" font-family="DM Mono" font-size="10" text-anchor="middle" font-weight="600" id="sNE">Exit: 632°C</text>
+        <text x="145" y="368" fill="#78909c" font-family="DM Mono" font-size="8" text-anchor="middle" id="sNP">Press: 1362 mmwc</text>
+        <!-- NOF OH badges -->
+        <rect x="62" y="374" width="74" height="16" rx="3" fill="#ffebee" stroke="#e57373" stroke-width="0.8"/>
+        <text x="99" y="385" fill="#c62828" font-family="DM Mono" font-size="8" text-anchor="middle" id="sNO1">OH1: —</text>
+        <rect x="143" y="374" width="74" height="16" rx="3" fill="#e3f2fd" stroke="#64b5f6" stroke-width="0.8"/>
+        <text x="180" y="385" fill="#0277bd" font-family="DM Mono" font-size="8" text-anchor="middle" id="sNO2">OH2: —</text>
+
+        <!-- Comb Air Preheat -->
+        <text x="145" y="56" fill="#e65100" font-family="DM Mono" font-size="8" text-anchor="middle">PREHEAT</text>
+        <text x="145" y="67" fill="#e65100" font-family="DM Mono" font-size="10" text-anchor="middle" id="sPH">155°C</text>
+        <line x1="145" y1="70" x2="145" y2="90" stroke="#e65100" stroke-width="0.8" stroke-dasharray="3,2" opacity="0.7"/>
+
+        <!-- ═══ RTF ═══ -->
+        <rect x="250" y="72" width="210" height="248" rx="8" fill="url(#rtf-g)" stroke="#e65100" stroke-width="1.5" filter="url(#fs)"/>
+        <!-- RTF radiant tube lines -->
+        <g stroke="#e65100" stroke-width="1.2" opacity="0.5">
+          <line x1="268" y1="110" x2="442" y2="110"/>
+          <line x1="268" y1="145" x2="442" y2="145"/>
+          <line x1="268" y1="185" x2="442" y2="185"/>
+          <line x1="268" y1="240" x2="442" y2="240"/>
+          <line x1="268" y1="275" x2="442" y2="275"/>
+          <line x1="268" y1="308" x2="442" y2="308"/>
+        </g>
+        <!-- RTF tube end caps -->
+        <g fill="#e65100" opacity="0.45">
+          <circle cx="268" cy="110" r="5"/><circle cx="442" cy="110" r="5"/>
+          <circle cx="268" cy="145" r="5"/><circle cx="442" cy="145" r="5"/>
+          <circle cx="268" cy="185" r="5"/><circle cx="442" cy="185" r="5"/>
+          <circle cx="268" cy="240" r="5"/><circle cx="442" cy="240" r="5"/>
+          <circle cx="268" cy="275" r="5"/><circle cx="442" cy="275" r="5"/>
+          <circle cx="268" cy="308" r="5"/><circle cx="442" cy="308" r="5"/>
+        </g>
+        <!-- RTF zone dividers -->
+        <line x1="322" y1="77" x2="322" y2="315" stroke="#e65100" stroke-width="0.8" stroke-dasharray="4,4" opacity="0.5"/>
+        <line x1="390" y1="77" x2="390" y2="315" stroke="#e65100" stroke-width="0.8" stroke-dasharray="4,4" opacity="0.5"/>
+        <!-- RTF zone labels -->
+        <text x="285" y="64" fill="#bf360c" font-family="DM Mono" font-size="8" text-anchor="middle">Z1</text>
+        <text x="355" y="64" fill="#bf360c" font-family="DM Mono" font-size="8" text-anchor="middle">Z2</text>
+        <text x="416" y="64" fill="#bf360c" font-family="DM Mono" font-size="8" text-anchor="middle">SZ</text>
+        <text x="285" y="55" fill="#e65100" font-family="DM Mono" font-size="9" text-anchor="middle" id="sR1">680°C</text>
+        <text x="355" y="55" fill="#e65100" font-family="DM Mono" font-size="9" text-anchor="middle" id="sR2">720°C</text>
+        <text x="416" y="55" fill="#e65100" font-family="DM Mono" font-size="9" text-anchor="middle" id="sRS">670°C</text>
+        <!-- RTF label block -->
+        <text x="355" y="338" fill="#e65100" font-family="Barlow Condensed" font-size="15" text-anchor="middle" font-weight="800" letter-spacing="2">RTF</text>
+        <text x="355" y="350" fill="#78909c" font-family="DM Mono" font-size="7.5" text-anchor="middle">RADIANT TUBE FURNACE</text>
+        <text x="355" y="364" fill="#e65100" font-family="DM Mono" font-size="10" text-anchor="middle" font-weight="600" id="sRE">Exit: 650°C</text>
+        <!-- RTF OH badges -->
+        <rect x="252" y="372" width="74" height="16" rx="3" fill="#ffebee" stroke="#e57373" stroke-width="0.8"/>
+        <text x="289" y="383" fill="#c62828" font-family="DM Mono" font-size="8" text-anchor="middle" id="sRO1">OH1: —</text>
+        <rect x="333" y="372" width="74" height="16" rx="3" fill="#e3f2fd" stroke="#64b5f6" stroke-width="0.8"/>
+        <text x="370" y="383" fill="#0277bd" font-family="DM Mono" font-size="8" text-anchor="middle" id="sRO2">OH2: —</text>
+
+        <!-- ═══ JCF ═══ -->
+        <rect x="480" y="168" width="74" height="120" rx="6" fill="#f1f8f1" stroke="#2e7d32" stroke-width="1.2" filter="url(#fs)"/>
+        <g stroke="#2e7d32" stroke-width="0.8" opacity="0.5">
+          <line x1="492" y1="195" x2="542" y2="195"/>
+          <line x1="492" y1="215" x2="542" y2="215"/>
+          <line x1="492" y1="235" x2="542" y2="235"/>
+          <line x1="492" y1="255" x2="542" y2="255"/>
+          <line x1="492" y1="272" x2="542" y2="272"/>
+        </g>
+        <text x="517" y="163" fill="#1b5e20" font-family="DM Mono" font-size="8" text-anchor="middle">EXIT</text>
+        <text x="517" y="153" fill="#2e7d32" font-family="DM Mono" font-size="9" text-anchor="middle">443°C</text>
+        <text x="517" y="302" fill="#2e7d32" font-family="Barlow Condensed" font-size="13" text-anchor="middle" font-weight="800" letter-spacing="1">JCF</text>
+        <text x="517" y="313" fill="#78909c" font-family="DM Mono" font-size="7" text-anchor="middle">JET COOL</text>
+        <!-- JCF status badge -->
+        <rect x="481" y="318" width="72" height="14" rx="3" fill="#e8f5e9" stroke="#81c784" stroke-width="0.8"/>
+        <text x="517" y="328" fill="#2e7d32" font-family="DM Mono" font-size="7.5" text-anchor="middle">✓ IN RANGE</text>
+
+        <!-- ═══ HBR ═══ -->
+        <rect x="570" y="190" width="65" height="82" rx="6" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1.2" filter="url(#fs)"/>
+        <text x="602" y="185" fill="#6a1b9a" font-family="DM Mono" font-size="8" text-anchor="middle">TEMP</text>
+        <text x="602" y="175" fill="#7b1fa2" font-family="DM Mono" font-size="9" text-anchor="middle" id="sHBR">528°C</text>
+        <text x="602" y="279" fill="#7b1fa2" font-family="Barlow Condensed" font-size="12" text-anchor="middle" font-weight="800" letter-spacing="1">HBR</text>
+        <text x="602" y="289" fill="#78909c" font-family="DM Mono" font-size="7" text-anchor="middle">HOLD ROLL</text>
+        <!-- HBR OH badge -->
+        <rect x="571" y="294" width="63" height="14" rx="3" fill="#ffebee" stroke="#ef9a9a" stroke-width="0.8"/>
+        <text x="602" y="304" fill="#c62828" font-family="DM Mono" font-size="7.5" text-anchor="middle" id="sHO">OH1: +8°C</text>
+
+        <!-- EXIT arrow -->
+        <line x1="638" y1="235" x2="668" y2="235" stroke="#b0bec5" stroke-width="1.5" stroke-dasharray="3,3"/>
+        <text x="668" y="230" fill="#b0bec5" font-family="DM Mono" font-size="9" text-anchor="end">EXIT ▶</text>
+
+        <!-- ═══ STRIP LINE ═══ -->
+        <rect x="43" y="226" width="620" height="18" rx="2" fill="url(#strip-g)" opacity="0.9" id="strip-rect"/>
+        <!-- flow arrows -->
+        <g fill="#cfd8dc" opacity="0.6">
+          <polygon points="645,231 658,235 645,239"/>
+          <polygon points="658,231 671,235 658,239"/>
+        </g>
+
+        <!-- ═══ LINE SPEED BAR ═══ -->
+        <rect x="43" y="405" width="615" height="18" rx="4" fill="#f0f4f8" stroke="#dde3ec" stroke-width="1"/>
+        <text x="53" y="418" fill="#78909c" font-family="DM Mono" font-size="8.5">LINE SPEED</text>
+        <rect x="118" y="407" width="520" height="14" rx="3" fill="#eef2f7" stroke="#dde3ec" stroke-width="0.5"/>
+        <rect x="118" y="407" id="sFill" width="320" height="14" rx="3" fill="url(#spd-g)" style="transition:width 0.5s"/>
+        <text x="648" y="418" fill="#1565c0" font-family="DM Mono" font-size="9.5" text-anchor="end" id="sSPD">125 mpm</text>
+
+        <!-- ═══ MMBTU BAR ═══ -->
+        <rect x="43" y="428" width="615" height="18" rx="4" fill="#f0f4f8" stroke="#dde3ec" stroke-width="1"/>
+        <text x="53" y="441" fill="#78909c" font-family="DM Mono" font-size="8.5">MMBTU/t</text>
+        <rect x="118" y="430" width="520" height="14" rx="3" fill="#eef2f7" stroke="#dde3ec" stroke-width="0.5"/>
+        <rect x="118" y="430" id="sMBar" width="390" height="14" rx="3" fill="url(#mb-g)" style="transition:width 0.5s"/>
+        <!-- Target marker -->
+        <line x1="260" y1="428" x2="260" y2="446" stroke="#2e7d32" stroke-width="2"/>
+        <text x="263" y="426" fill="#2e7d32" font-family="DM Mono" font-size="7">0.450</text>
+        <text x="648" y="441" fill="#e65100" font-family="DM Mono" font-size="9.5" text-anchor="end" id="sMBTU">0.600</text>
+
+        <!-- ═══ LIMIT BANDS on strip ═══ -->
+        <text x="145" y="260" fill="#0277bd" font-family="DM Mono" font-size="7" text-anchor="middle" id="sNLim">NOF: 620–650°C</text>
+        <text x="355" y="260" fill="#e65100" font-family="DM Mono" font-size="7" text-anchor="middle" id="sRLim">RTF: 630–670°C</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL: ADVISORY -->
+  <div class="col-r">
+    <div class="sh"><div class="sh-dot"></div>ADVISORY OUTPUT</div>
+    <div class="adv-wrap" id="adv-panel"></div>
+
+    <div class="sh"><div class="sh-dot"></div>SETPOINT RECOMMENDATIONS</div>
+    <div style="padding:8px 14px 12px">
+      <table class="rt">
+        <thead><tr><th>Parameter</th><th>Current</th><th>Optimal</th><th>Δ</th></tr></thead>
+        <tbody id="rec-body"></tbody>
+      </table>
+    </div>
+
+    <div class="sh"><div class="sh-dot"></div>ENERGY WASTE DRIVERS</div>
+    <div style="padding:10px 14px 12px" id="drv-panel"></div>
+
+    <div class="sh"><div class="sh-dot"></div>GRADE × THICKNESS REFERENCE</div>
+    <div style="padding:8px 14px 14px">
+      <table class="gt">
+        <thead><tr><th>Grade / Thk</th><th>NOF</th><th>RTF SZ</th><th>Speed</th><th>MMBTU/t</th></tr></thead>
+        <tbody>
+          <tr><td>SS250 ≤0.45mm</td><td>620–640°C</td><td>630–650°C</td><td>≥130</td><td style="color:var(--green)">~0.52</td></tr>
+          <tr><td>SS250 0.45–0.55mm</td><td>630–650°C</td><td>640–660°C</td><td>≥125</td><td style="color:var(--amber)">~0.58</td></tr>
+          <tr><td>SS250 &gt;0.55mm</td><td>640–650°C</td><td>650–670°C</td><td>≥120</td><td style="color:var(--red)">~0.65</td></tr>
+          <tr class="hl"><td>SS550 ≤0.43mm</td><td>510–530°C</td><td>540–555°C</td><td>≥130</td><td style="color:var(--green)">~0.46</td></tr>
+          <tr><td>SS550 0.43–0.50mm</td><td>520–540°C</td><td>548–568°C</td><td>≥128</td><td style="color:var(--green)">~0.50</td></tr>
+          <tr><td>SS350 any</td><td>760–785°C</td><td>755–795°C</td><td>≥115</td><td style="color:var(--red)">~0.72</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── REAL RIDGE REGRESSION MODEL (R²=0.63, from 131 days of CGL-2 data) ──
+// Coefficients from sklearn Ridge(alpha=1.0) — standardised inputs
+const INTERCEPT = 0.5623;
+const COEFF = {
+  'nof-z1':  -0.000994  / 63.55,
+  'nof-z2':  -0.013743  / 22.58,
+  'nof-z3':   0.000011  / 12.35,
+  'nof-z4':  -0.009137  /  8.995,
+  'rtf-z1':  -0.018564  / 53.12,
+  'rtf-z2':   0.052660  / 67.70,
+  'rtf-sz':   0.020012  / 55.48,
+  'nof-press':-0.013957 / 86.13,
+  'preheat':  -0.008463 / 29.70,
+  'speed':    -0.026643 /  9.489,
+  'thk':      -0.005842 /  0.03949,
+};
+const MEANS = {
+  'nof-z1':960.1,'nof-z2':1204.3,'nof-z3':1242.8,'nof-z4':1212.3,
+  'rtf-z1':644.3,'rtf-z2':675.6,'rtf-sz':632.7,
+  'nof-press':1382.5,'preheat':141.0,'speed':126.1,'thk':0.4437,
+};
+const GRADE_COEFF = { SS250: 0.012055/0.482, SS550: 0, SS350: 0.024 };
+const GRADE_MEANS = { SS250: 0.6328, SS350: 1.2656, SS550: 0 };
+
+const LIMITS = {
+  SS250:{nl:620,nu:650,rl:630,ru:670,jl:434,ju:446,hl:500,hu:520},
+  SS350:{nl:740,nu:790,rl:740,ru:800,jl:434,ju:446,hl:500,hu:520},
+  SS550:{nl:500,nu:540,rl:530,ru:570,jl:434,ju:446,hl:500,hu:520},
+};
+const OPTIMAL = {
+  SS250:{'nof-z1':1018,'nof-z2':1232,'nof-z3':1251,'nof-z4':1222,'nof-press':1440,'rtf-z1':676,'rtf-z2':711,'rtf-sz':650,'speed':132,'preheat':171},
+  SS350:{'nof-z1':970, 'nof-z2':1205,'nof-z3':1240,'nof-z4':1210,'nof-press':1450,'rtf-z1':760,'rtf-z2':778,'rtf-sz':760,'speed':118,'preheat':160},
+  SS550:{'nof-z1':898, 'nof-z2':1181,'nof-z3':1244,'nof-z4':1212,'nof-press':1459,'rtf-z1':574,'rtf-z2':581,'rtf-sz':555,'speed':130,'preheat':113},
+};
+const PNAMES = {'nof-z1':'NOF Z1','nof-z2':'NOF Z2','nof-z3':'NOF Z3','nof-z4':'NOF Z4',
+  'nof-press':'NOF Comb Pressure','rtf-z1':'RTF Z1','rtf-z2':'RTF Z2','rtf-sz':'RTF SZ',
+  'speed':'Line Speed','preheat':'Comb Air Preheat'};
+const PUNITS = {'nof-z1':'°C','nof-z2':'°C','nof-z3':'°C','nof-z4':'°C',
+  'nof-press':'mmwc','rtf-z1':'°C','rtf-z2':'°C','rtf-sz':'°C','speed':'mpm','preheat':'°C'};
+
+let grade = 'SS250';
+let S = {};  // current slider state
+
+function predictMmbtu() {
+  let p = INTERCEPT;
+  const keys = ['nof-z1','nof-z2','nof-z3','nof-z4','rtf-z1','rtf-z2','rtf-sz','nof-press','preheat','speed'];
+  for (const k of keys) {
+    p += COEFF[k] * (S[k] - MEANS[k]);
+  }
+  // Thickness effect
+  const thk = parseFloat(document.getElementById('sel-thk').value);
+  p += COEFF['thk'] * (thk - MEANS['thk']);
+  // Grade dummy
+  const gNum = {SS250:1,SS350:2,SS550:0}[grade];
+  p += GRADE_COEFF[grade] * (gNum - GRADE_MEANS[grade]);
+  return Math.max(0.35, Math.min(0.88, p));
+}
+
+function estNofExit() {
+  const L = LIMITS[grade];
+  const O = OPTIMAL[grade];
+  let base = (L.nl + L.nu) / 2;
+  base += (S['nof-z1'] - O['nof-z1']) * 0.075;
+  base += (O['speed'] - S['speed']) * 0.38;
+  return Math.round(Math.max(L.nl - 80, Math.min(L.nu + 150, base)));
+}
+function estRtfExit() {
+  const L = LIMITS[grade];
+  const O = OPTIMAL[grade];
+  let base = (L.rl + L.ru) / 2;
+  base += (S['rtf-sz'] - O['rtf-sz']) * 0.65;
+  base += (S['rtf-z2'] - O['rtf-z2']) * 0.12;
+  base += (O['speed'] - S['speed']) * 0.28;
+  return Math.round(Math.max(L.rl - 100, Math.min(L.ru + 180, base)));
+}
+function estHbr() { return Math.round(528 + (S['rtf-sz'] - 633) * 0.04); }
+
+function go() {
+  const L  = LIMITS[grade];
+  const O  = OPTIMAL[grade];
+  const mb = predictMmbtu();
+  const ne = estNofExit();
+  const re = estRtfExit();
+  const hb = estHbr();
+  const oh1_n = ne - L.nu, oh2_n = ne - L.nl;
+  const oh1_r = re - L.ru, oh2_r = re - L.rl;
+  const oh1_h = hb - L.hu;
+
+  // ── KPI BAR ──
+  const km = document.getElementById('kpi-m');
+  km.textContent = mb.toFixed(4);
+  km.className = 'kpi-num ' + cls(mb,0.45,0.55);
+
+  const gap = mb - 0.45;
+  const kg = document.getElementById('kpi-gap');
+  kg.textContent = (gap>=0?'+':'')+gap.toFixed(4);
+  kg.className = 'kpi-num ' + (gap<0?'ok':gap<0.08?'warn':'bad');
+
+  const eff = Math.round(0.45/mb*100);
+  const ke = document.getElementById('kpi-eff');
+  ke.textContent = eff+'%';
+  ke.className = 'kpi-num '+(eff>=95?'ok':eff>=85?'warn':'bad');
+
+  const ks = document.getElementById('kpi-st');
+  if(mb<0.47){ks.textContent='OPTIMAL';ks.className='kpi-num ok';}
+  else if(mb<0.55){ks.textContent='REVIEW';ks.className='kpi-num warn';}
+  else{ks.textContent='ACTION!';ks.className='kpi-num bad';}
+
+  // ── ENERGY BAR ──
+  const pct = Math.min(100,((mb-0.35)/(0.75-0.35))*100);
+  const ef = document.getElementById('ebar');
+  ef.style.width = pct+'%';
+  ef.style.background = mb<0.45?'linear-gradient(90deg,#2e7d32,#66bb6a)'
+    :mb<0.55?'linear-gradient(90deg,#f57c00,#ffa726)'
+    :'linear-gradient(90deg,#d32f2f,#ef5350)';
+  document.getElementById('ebar-v').textContent = mb.toFixed(4)+' MMBTU/t';
+  document.getElementById('ebar-v').style.color = mb<0.45?'#2e7d32':mb<0.55?'#e65100':'#c62828';
+
+  // ── ZONE STATUS ──
+  setZS('nof',ne,oh1_n,oh2_n);
+  setZS('rtf',re,oh1_r,oh2_r);
+  const spEl=document.getElementById('zs-spd'); spEl.textContent=S['speed']+' mpm';
+  const spSt=document.getElementById('zo-spd');
+  const minS=grade==='SS250'?125:grade==='SS550'?128:115;
+  if(S['speed']<minS-5){spEl.className='zstat-val c-bad';spSt.textContent='⚠ TOO SLOW';spSt.className='zstat-oh c-bad';}
+  else if(S['speed']<minS){spEl.className='zstat-val c-warn';spSt.textContent='▲ BORDERLINE';spSt.className='zstat-oh c-warn';}
+  else{spEl.className='zstat-val c-ok';spSt.textContent='✓ OK';spSt.className='zstat-oh c-ok';}
+
+  document.getElementById('zs-hbr').textContent=hb+'°C';
+  const hst=document.getElementById('zo-hbr');
+  hst.textContent='OH1: '+(oh1_h>0?'+':'')+oh1_h+'°C';
+  hst.className='zstat-oh '+(oh1_h>10?'c-bad':'c-warn');
+
+  // ── SVG UPDATE ──
+  setText('sZ1',S['nof-z1']+'°C'); setText('sZ2',S['nof-z2']+'°C');
+  setText('sZ3',S['nof-z3']+'°C'); setText('sZ4',S['nof-z4']+'°C');
+  setText('sR1',S['rtf-z1']+'°C'); setText('sR2',S['rtf-z2']+'°C');
+  setText('sRS',S['rtf-sz']+'°C');
+  setText('sNE','Exit: '+ne+'°C'); setText('sNP','Press: '+S['nof-press']+' mmwc');
+  setText('sRE','Exit: '+re+'°C');
+  setText('sPH',S['preheat']+'°C');
+  setText('sHBR',hb+'°C');
+  setText('sHO','OH1: '+(oh1_h>0?'+':'')+oh1_h+'°C');
+  setText('sNO1','OH1: '+(oh1_n>0?'+':'')+oh1_n+'°C');
+  setText('sNO2','OH2: '+(oh2_n>0?'+':'')+oh2_n+'°C');
+  setText('sRO1','OH1: '+(oh1_r>0?'+':'')+oh1_r+'°C');
+  setText('sRO2','OH2: '+(oh2_r>0?'+':'')+oh2_r+'°C');
+  setText('sSPD',S['speed']+' mpm');
+  setText('sMBTU',mb.toFixed(3));
+  const L2=LIMITS[grade];
+  setText('sNLim','NOF: '+L2.nl+'–'+L2.nu+'°C');
+  setText('sRLim','RTF: '+L2.rl+'–'+L2.ru+'°C');
+
+  // Speed fill bar (118px start, 520px wide)
+  const sf = (S['speed']-87)/(140-87);
+  document.getElementById('sFill').setAttribute('width',Math.round(520*sf));
+  // MMBTU bar (118px start, 520px wide, 0.35 to 0.75)
+  const mf = Math.min(1,(mb-0.35)/(0.75-0.35));
+  document.getElementById('sMBar').setAttribute('width',Math.round(520*mf));
+
+  // Strip color
+  const heat = Math.min(1,(ne-L.nl)/(L.nu-L.nl+80));
+  document.getElementById('sc1').setAttribute('stop-color', heat>0.6?'#e53935':'#ef9a9a');
+  document.getElementById('sc2').setAttribute('stop-color', heat>0.6?'#b71c1c':'#e53935');
+
+  // ── ADVISORY ──
+  renderAdv(mb,ne,re,hb,oh1_n,oh1_r,oh1_h,oh2_r,O,L);
+  renderRec(O);
+  renderDrv(O);
+  renderGT();
+}
+
+function setZS(zone, temp, oh1, oh2) {
+  const ev = document.getElementById('zs-'+zone);
+  const eo = document.getElementById('zo-'+zone);
+  ev.textContent = temp+'°C';
+  if(oh1>5){ev.className='zstat-val c-bad';eo.textContent='OH1 +'+oh1+'°C OVER';eo.className='zstat-oh c-bad';}
+  else if(oh2<-5){ev.className='zstat-val c-info';eo.textContent='OH2 '+oh2+'°C UNDER';eo.className='zstat-oh c-info';}
+  else{ev.className='zstat-val c-ok';eo.textContent='✓ IN RANGE';eo.className='zstat-oh c-ok';}
+}
+
+function renderAdv(mb,ne,re,hb,oh1n,oh1r,oh1h,oh2r,O,L) {
+  const cards = [];
+  // Overall
+  if(mb<0.47) cards.push({t:'ok',h:'✓ OPTIMAL — BELOW TARGET',b:`Predicted ${mb.toFixed(4)} MMBTU/t is below 0.450 target. Current settings are well-optimized for ${grade}.`});
+  else if(mb<0.55) cards.push({t:'warn',h:'▲ ABOVE TARGET — IMPROVEMENT POSSIBLE',b:`Predicted ${mb.toFixed(4)} MMBTU/t — ${((mb-0.45)/0.45*100).toFixed(1)}% above target. Apply recommendations below. Saving potential: ${(mb-0.45).toFixed(3)} MMBTU/t.`});
+  else cards.push({t:'bad',h:'⚠ HIGH ENERGY — IMMEDIATE ACTION REQUIRED',b:`Predicted ${mb.toFixed(4)} MMBTU/t — ${((mb-0.45)/0.45*100).toFixed(1)}% above target. Est. saving: ${(mb-0.45).toFixed(3)} MMBTU/t per tonne produced.`});
+
+  // NOF
+  if(oh1n>15) cards.push({t:'bad',h:'⚠ NOF OVERHEATING — OH1 = +'+oh1n+'°C',b:`Strip exit ${ne}°C exceeds upper limit ${L.nu}°C. Primary cause: speed ${S['speed']} mpm (too low). Raise to ≥${O['speed']} mpm. Reduce NOF Z1 toward ${O['nof-z1']}°C.`});
+  else if(oh1n>0) cards.push({t:'warn',h:'▲ NOF SLIGHT OVERHEAT — OH1 = +'+oh1n+'°C',b:`NOF exit marginally above ${L.nu}°C. Increase speed 5–8 mpm or trim Z1 by 10–20°C to bring into range.`});
+  else if(ne<L.nl-10) cards.push({t:'info',h:'ℹ NOF UNDERHEATING — OH2 = '+(ne-L.nl)+'°C',b:`NOF exit ${ne}°C is below lower limit ${L.nl}°C. Consider raising Z1/Z2 setpoints slightly.`});
+  else cards.push({t:'ok',h:'✓ NOF IN RANGE',b:`NOF exit ${ne}°C within ${L.nl}–${L.nu}°C.`});
+
+  // RTF
+  if(oh1r>5) cards.push({t:'bad',h:'⚠ RTF OVERHEATING — OH1 = +'+oh1r+'°C',b:`RTF exit ${re}°C above ${L.ru}°C upper limit. Reduce RTF SZ from ${S['rtf-sz']}°C. RTF SZ is the #1 fuel driver (r=0.682).`});
+  else if(oh2r<-20) cards.push({t:'warn',h:'▲ RTF UNDERHEATING — OH2 = '+oh2r+'°C',b:`RTF exit ${re}°C below lower limit ${L.rl}°C — risk of inadequate annealing. Raise RTF SZ or reduce speed. Critical for SS550 (74% hours underheated in historical data).`});
+  else cards.push({t:'ok',h:'✓ RTF IN RANGE',b:`RTF exit ${re}°C within ${L.rl}–${L.ru}°C.`});
+
+  // Pressure
+  if(S['nof-press']<1380) cards.push({t:'warn',h:'▲ LOW COMBUSTION AIR PRESSURE — '+S['nof-press']+' mmwc',b:`Below optimal 1440–1500 mmwc. Incomplete combustion wastes LPG. Increase fan output. Est. saving: 0.018–0.025 MMBTU/t.`});
+
+  // Preheat
+  if(S['preheat']<155) cards.push({t:'info',h:'ℹ PREHEAT BELOW OPTIMAL — '+S['preheat']+'°C',b:`Optimal >160°C. Each +10°C preheat ≈ 0.005 MMBTU/t saving. Inspect recuperator bypass seals.`});
+
+  // HBR
+  if(oh1h>10) cards.push({t:'warn',h:'▲ HBR OVERHEATING — '+hb+'°C (limit 520°C)',b:`HBR runs ${oh1h}°C above upper limit. Grade-independent pattern (67–74% of hours historically). Inspect HBR cooling system — not addressable via furnace setpoints.`});
+
+  document.getElementById('adv-panel').innerHTML = cards.map(c=>`
+    <div class="adv-card ${c.t}">
+      <div class="adv-t ${c.t}">${c.h}</div>
+      <div class="adv-body">${c.b}</div>
+    </div>`).join('');
+}
+
+function renderRec(O) {
+  const keys = ['rtf-sz','rtf-z2','rtf-z1','speed','nof-press','preheat','nof-z1'];
+  document.getElementById('rec-body').innerHTML = keys.map(k=>{
+    const cur=S[k], tgt=O[k], d=tgt-cur;
+    let dc='', ds='—';
+    if(Math.abs(d)>=5){dc=d>0?'c-ok':'c-warn'; ds=(d>0?'▲ +':'▼ ')+Math.round(d);}
+    else {dc='c-ok'; ds='✓ OK';}
+    return `<tr><td>${PNAMES[k]}</td><td>${cur}${PUNITS[k]}</td>
+      <td class="${dc}" style="font-weight:600">${tgt}${PUNITS[k]}</td>
+      <td class="${dc}" style="font-weight:600">${ds}${PUNITS[k]}</td></tr>`;
+  }).join('');
+}
+
+function renderDrv(O) {
+  const drivers = [
+    {n:'RTF Soaking Zone',k:'rtf-sz',sc:0.0012,c:'#e65100'},
+    {n:'RTF Z2',k:'rtf-z2',sc:0.0010,c:'#ff7043'},
+    {n:'Line Speed',k:'speed',sc:0.0035,c:'#1565c0'},
+    {n:'NOF Comb Pressure',k:'nof-press',sc:0.00025,c:'#f57c00'},
+    {n:'NOF Z1',k:'nof-z1',sc:0.0005,c:'#0277bd'},
+    {n:'Preheat',k:'preheat',sc:0.0004,c:'#6a1b9a'},
+    {n:'RTF Z1',k:'rtf-z1',sc:0.0008,c:'#bf360c'},
+  ];
+  let html = '';
+  for(const d of drivers){
+    const impact = Math.abs((S[d.k] - O[d.k]) * d.sc);
+    const barW = Math.min(100, impact / 0.08 * 100);
+    const cls2 = impact<0.005?'c-ok':impact<0.02?'c-warn':'c-bad';
+    html+=`<div class="drv-item">
+      <div class="drv-top">
+        <span class="drv-name">${d.n}</span>
+        <span class="drv-v ${cls2}">+${impact.toFixed(4)}</span>
+      </div>
+      <div class="drv-track">
+        <div class="drv-fill" style="width:${barW}%;background:${d.c}"></div>
+      </div>
+    </div>`;
+  }
+  document.getElementById('drv-panel').innerHTML = html;
+}
+
+function renderGT() {
+  const O = OPTIMAL[grade];
+  const thk = parseFloat(document.getElementById('sel-thk').value);
+  const mb = predictMmbtu();
+  document.getElementById('gt-head').textContent = `${grade} / ${thk.toFixed(2)} mm`;
+  const L = LIMITS[grade];
+  const rows = [
+    ['NOF Exit Target', `${L.nl}–${L.nu}°C`, `${L.nl}–${L.nu}°C`],
+    ['RTF SZ Target',   `${L.rl}–${L.ru}°C`, `${L.rl}–${L.ru}°C`],
+    ['NOF Z1 Optimal',  `${O['nof-z1']}°C`,   grade==='SS250'?'950–1000°C':'870–920°C'],
+    ['RTF SZ Optimal',  `${O['rtf-sz']}°C`,   `${L.rl}–${L.ru}°C`],
+    ['Speed Optimal',   `${O['speed']} mpm`,   '≥'+(O['speed']-5)+' mpm'],
+    ['Comb Pressure',   `${O['nof-press']} mmwc`, '1440–1500 mmwc'],
+    ['Preheat',         `${O['preheat']}°C`,   '>155°C'],
+    ['Est. MMBTU/t',    mb.toFixed(4),          '< 0.450 target'],
+  ];
+  document.getElementById('gt-rows').innerHTML = rows.map((r,i)=>`
+    <div class="opt-row" style="${i===rows.length-1?'background:#fff8e1;':''}">
+      <span class="opt-pname"${i===rows.length-1?' style="font-weight:600;color:var(--amber)"':''}>${r[0]}</span>
+      <span class="opt-val" style="${i===rows.length-1?`color:${parseFloat(mb.toFixed(4))<0.45?'var(--green)':'var(--red)'}`:''}">${r[1]}</span>
+      <span class="opt-range">${r[2]}</span>
+    </div>`).join('');
+}
+
+// ── CONTROLS ───────────────────────────────────────────────────────────
+function sl(key, val) {
+  S[key] = parseFloat(val);
+  const vEl = document.getElementById('v-'+key);
+  if(vEl) {
+    vEl.textContent = val;
+    const opt = OPTIMAL[grade][key];
+    const diff = Math.abs(parseFloat(val)-opt);
+    vEl.className = 'sb-val '+(diff<8?'ok':diff<25?'':'warn');
+  }
+  go();
+}
+
+function tog(zone) {
+  const body = document.getElementById('zb-'+zone);
+  const arr  = document.getElementById('arr-'+zone);
+  body.classList.toggle('open');
+  if(arr) arr.textContent = body.classList.contains('open') ? '▼' : '▶';
+}
+
+function setGrade(g, btn) {
+  grade = g;
+  document.querySelectorAll('.gbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  applyOpt();
+}
+
+function applyOpt() {
+  const O = OPTIMAL[grade];
+  for(const [k,v] of Object.entries(O)) {
+    S[k] = v;
+    const s = document.getElementById('s-'+k);
+    const l = document.getElementById('v-'+k);
+    if(s) s.value = v;
+    if(l) { l.textContent = v; l.className='sb-val ok'; }
+  }
+  go();
+}
+
+function resetDef() {
+  const defs = {
+    SS250:{'nof-z1':994,'nof-z2':1216,'nof-z3':1243,'nof-z4':1214,'nof-press':1362,'rtf-z1':680,'rtf-z2':720,'rtf-sz':670,'speed':125,'preheat':155},
+    SS550:{'nof-z1':902,'nof-z2':1184,'nof-z3':1243,'nof-z4':1210,'nof-press':1418,'rtf-z1':583,'rtf-z2':599,'rtf-sz':569,'speed':128,'preheat':116},
+    SS350:{'nof-z1':960,'nof-z2':1200,'nof-z3':1240,'nof-z4':1210,'nof-press':1380,'rtf-z1':760,'rtf-z2':775,'rtf-sz':760,'speed':118,'preheat':145},
+  };
+  const d = defs[grade];
+  for(const [k,v] of Object.entries(d)) {
+    S[k]=v;
+    const s=document.getElementById('s-'+k); if(s) s.value=v;
+    const l=document.getElementById('v-'+k); if(l) l.textContent=v;
+  }
+  go();
+}
+
+function cls(v,good,warn) { return v<good?'ok':v<warn?'warn':'bad'; }
+function setText(id, txt) { const e=document.getElementById(id); if(e) e.textContent=txt; }
+
+// Clock
+function updateClock() {
+  const n=new Date();
+  const el=document.getElementById('clock');
+  if(el) el.textContent=n.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+' '+n.toLocaleTimeString('en-GB');
+}
+setInterval(updateClock,1000); updateClock();
+
+// Init
+window.addEventListener('DOMContentLoaded', resetDef);
+</script>
+</body>
+</html>
